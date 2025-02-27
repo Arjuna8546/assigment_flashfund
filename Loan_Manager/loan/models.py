@@ -17,6 +17,7 @@ class Loan(models.Model):
     interest_rate = models.DecimalField(max_digits=5, decimal_places=2)
     created_date = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    instalment = models.PositiveIntegerField(default=0)
 
     def save(self, *args, **kwargs):
         if not self.loan_id:
@@ -29,24 +30,24 @@ class Loan(models.Model):
         return f"{self.loan_id} - {self.borrower.username}"
     
     def calculate_loan_details(self):
-        principal = float(self.amount)  # 10000
-        annual_rate = float(self.interest_rate) / 100  # 0.1
-        monthly_rate = annual_rate / 12  # 0.008333...
-        months = int(self.tenure)  # 12
+        principal = float(self.amount) 
+        annual_rate = float(self.interest_rate) / 100  
+        monthly_rate = annual_rate / 12  
+        months = int(self.tenure)  
 
         if monthly_rate > 0:
-            factor = (1 + monthly_rate) ** months  # (1 + 0.008333)^12 ≈ 1.104713
-            emi = (principal * monthly_rate * factor) / (factor - 1)  # Unrounded EMI
+            factor = (1 + monthly_rate) ** months  
+            emi = (principal * monthly_rate * factor) / (factor - 1)  
         else:
             emi = principal / months
 
-        total_amount = emi * months  # Use unrounded EMI first
+        total_amount = emi * months 
         total_interest = total_amount - principal
 
         return {
-            "monthly_installment": round(emi, 2),  # Round EMI for display
-            "total_amount": round(total_amount, 2),  # Round after multiplication
-            "total_interest": round(total_interest, 2)  # Round after subtraction
+            "monthly_installment": round(emi, 2),  
+            "total_amount": round(total_amount, 2),  
+            "total_interest": round(total_interest, 2)  
         }
 
     def generate_payment_schedule(self):
@@ -63,3 +64,49 @@ class Loan(models.Model):
                 "amount": details["monthly_installment"]
             })
         return schedule
+    
+    def get_loan_status(self):
+        details = self.calculate_loan_details()
+        emi = details["monthly_installment"]
+        total_amount = details["total_amount"]
+
+        installments_paid = min(self.instalment, self.tenure)  
+
+        amount_paid = emi * installments_paid
+
+        remaining_amount = total_amount - amount_paid
+
+        schedule = self.generate_payment_schedule()
+        if installments_paid < self.tenure:
+            next_due_date = schedule[installments_paid]["due_date"]
+        else:
+            next_due_date = None 
+
+        return {
+            "amount_paid": round(amount_paid, 2),
+            "remaining_amount": round(remaining_amount, 2),
+            "next_due_date": next_due_date
+        }
+    
+    def foreclose(self):
+        if self.status in ['repaid']:
+            raise ValueError("Loan is already settled.")
+
+        status = self.get_loan_status()
+        remaining_amount = status['remaining_amount']
+
+        foreclosure_discount = round(remaining_amount * 0.05, 2)
+        final_settlement_amount = round(remaining_amount - foreclosure_discount, 2)
+        amount_paid = self.amount
+
+        self.status = 'repaid'
+        self.instalment = self.tenure  
+        self.save()
+
+        return {
+            "loan_id": self.loan_id,
+            "amount_paid": amount_paid,
+            "foreclosure_discount": foreclosure_discount,
+            "final_settlement_amount": final_settlement_amount,
+            "status": self.status.upper()
+        }

@@ -59,3 +59,70 @@ class LoanSerializer(serializers.ModelSerializer):
                 "payment_schedule": data['payment_schedule']
             }
         }
+
+class LoanListSerializer(serializers.ModelSerializer):
+    monthly_installment = serializers.SerializerMethodField()
+    total_amount = serializers.SerializerMethodField()
+    amount_paid = serializers.SerializerMethodField()
+    amount_remaining = serializers.SerializerMethodField()
+    next_due_date = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Loan
+        fields = ['loan_id', 'amount', 'tenure', 'monthly_installment', 'total_amount',
+                  'amount_paid', 'amount_remaining', 'next_due_date', 'status', 'created_date']
+
+    def get_monthly_installment(self, obj):
+        return obj.calculate_loan_details()['monthly_installment']
+
+    def get_total_amount(self, obj):
+        return obj.calculate_loan_details()['total_amount']
+
+    def get_amount_paid(self, obj):
+        return obj.get_loan_status()['amount_paid']
+
+    def get_amount_remaining(self, obj):
+        return obj.get_loan_status()['remaining_amount']
+
+    def get_next_due_date(self, obj):
+        return obj.get_loan_status()['next_due_date']
+
+    def to_representation(self, instance):
+        data = super().to_representation(instance)
+        return {
+            "loan_id": data['loan_id'],
+            "amount": float(data['amount']),
+            "tenure": data['tenure'],
+            "monthly_installment": data['monthly_installment'],
+            "total_amount": data['total_amount'],
+            "amount_paid": data['amount_paid'],
+            "amount_remaining": data['amount_remaining'],
+            "next_due_date": data['next_due_date'],
+            "status": data['status'].upper(),
+            "created_at": data['created_date']
+        }
+    
+class LoanForeclosureSerializer(serializers.Serializer): 
+    loan_id = serializers.CharField(max_length=20)
+
+    def validate_loan_id(self, value):
+        try:
+
+            loan = Loan.objects.get(loan_id=value, borrower=self.context['request'].user)
+            self.instance = loan  
+        except Loan.DoesNotExist:
+            raise serializers.ValidationError("Loan not found or you don’t have permission.")
+        return value
+
+    def foreclose(self):
+        if not hasattr(self, 'instance'):
+            raise serializers.ValidationError("Loan instance not found.")
+        return self.instance.foreclose()
+
+    def to_representation(self, data):
+        foreclosure_details = self.foreclose()
+        return {
+            "status": "success",
+            "message": "Loan foreclosed successfully.",
+            "data": foreclosure_details
+        }
