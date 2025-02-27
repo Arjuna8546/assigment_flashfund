@@ -35,6 +35,7 @@ class RegisterSerializer(serializers.ModelSerializer):
             fail_silently=False,
         )
         user.otp = otp  # Temporarily store OTP 
+        print(otp)
         user.save()
         return user
 

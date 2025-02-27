@@ -110,8 +110,17 @@ class AdminOnlyView(APIView):
         return Response({'message': 'Welcome, Admin!'})
     
 class UserOnlyView(APIView):
-    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         return Response({'message': f'Hello, {request.user.role} {request.user.email}'})
+    
+class LogoutView(APIView):
+    def post(self, request):
+        response = Response(
+            {"status": "success", "message": "Logged out successfully"},
+            status=status.HTTP_200_OK
+        )
+        response.delete_cookie('access_token')
+        
+        return response
 
