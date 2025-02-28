@@ -4,7 +4,7 @@ from .serializers import CustomTokenObtainPairSerializer,RegisterSerializer, Ver
 from rest_framework import status
 from .models import CustomUser
 from .permissions import IsAdmin
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated,AllowAny
 
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
@@ -78,6 +78,7 @@ class CoustomTokenRefreshView(TokenRefreshView):
             return Response({"refresh":False})
         
 class RegisterView(APIView):
+    permission_classes = [AllowAny]
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
         if serializer.is_valid():
@@ -86,6 +87,7 @@ class RegisterView(APIView):
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
     
 class VerifyOTPView(APIView):
+    permission_classes = [AllowAny]
     def post(self, request):
         serializer = VerifyOTPSerializer(data=request.data)
         if serializer.is_valid():
@@ -121,6 +123,6 @@ class LogoutView(APIView):
             status=status.HTTP_200_OK
         )
         response.delete_cookie('access_token')
-        
+
         return response
 
