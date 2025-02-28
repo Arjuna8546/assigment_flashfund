@@ -5,6 +5,7 @@ from rest_framework import status
 from .models import CustomUser
 from .permissions import IsAdmin
 from rest_framework.permissions import IsAuthenticated,AllowAny
+from rest_framework import serializers
 
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
@@ -22,9 +23,10 @@ class CoustomTokenObtainPairView(TokenObtainPairView):
             access_token = tokens['access']
             refresh_token = tokens['refresh']
 
-            res = Response()
-
-            res.data = {"success":True}
+            res = Response({
+                "status": "success",
+                "message": "Tokens generated successfully.",
+            }, status=status.HTTP_200_OK)
 
             res.set_cookie(
                 key="access_token",
@@ -44,8 +46,18 @@ class CoustomTokenObtainPairView(TokenObtainPairView):
             )
 
             return res
-        except:
-            return Response({"success":False})
+        except serializers.ValidationError as e:
+            return Response({
+                "status": "error",
+                "detail": "Invalid credentials or input data.",
+                "errors": e.detail
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({
+                "status": "error",
+                "detail": "An unexpected error occurred.",
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
 
 class CoustomTokenRefreshView(TokenRefreshView):
@@ -60,9 +72,10 @@ class CoustomTokenRefreshView(TokenRefreshView):
             tokens = response.data
             access_token = tokens["access"]
 
-            res = Response() 
-
-            res.data = {"refresh":True}    
+            res = Response({
+                "status": "success",
+                "message": "Tokens refreshed successfully.",
+            }, status=status.HTTP_200_OK)   
 
             res.set_cookie(
                 key = "access_token",
@@ -74,55 +87,180 @@ class CoustomTokenRefreshView(TokenRefreshView):
             )   
             return res     
         
-        except:
-            return Response({"refresh":False})
+        except serializers.ValidationError as e:
+            return Response({
+                "status": "error",
+                "detail": "Invalid credentials or input data.",
+                "errors": e.detail
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+        except Exception as e:
+            return Response({
+                "status": "error",
+                "detail": "An unexpected error occurred.",
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
 class RegisterView(APIView):
     permission_classes = [AllowAny]
+
     def post(self, request):
         serializer = RegisterSerializer(data=request.data)
-        if serializer.is_valid():
-            serializer.save()
-            return Response({'message': 'User registered,check your mail for OTP '}, status=status.HTTP_201_CREATED)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            if serializer.is_valid(raise_exception=True): 
+                serializer.save()
+                return Response({
+                    "status": "success",
+                    "message": "User registered successfully. Check your email for OTP.",
+                    "data": {
+                        "email": serializer.validated_data.get('email')  
+                    }
+                }, status=status.HTTP_201_CREATED)
+        except serializers.ValidationError as e:
+            return Response({
+                "status": "error",
+                "detail": "Invalid registration data.",
+                "errors": e.detail
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({
+                "status": "error",
+                "detail": "An unexpected error occurred during registration.",
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
+
 class VerifyOTPView(APIView):
     permission_classes = [AllowAny]
+
     def post(self, request):
         serializer = VerifyOTPSerializer(data=request.data)
-        if serializer.is_valid():
-            email = serializer.validated_data['email']
-            otp = serializer.validated_data['otp']
-            try:
-                user = CustomUser.objects.get(email=email)
-                if user.otp == otp and not user.is_verified:
-                    user.is_active = True
-                    user.is_verified = True
-                    user.save()
-                    return Response({'message': 'Email verified successfully.'}, status=status.HTTP_200_OK)
-                return Response({'error': 'Invalid or expired OTP.'}, status=status.HTTP_400_BAD_REQUEST)
-            except CustomUser.DoesNotExist:
-                return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-    
+        
+        try:
+            if serializer.is_valid(raise_exception=True):  # Raises ValidationError if invalid
+                email = serializer.validated_data['email']
+                otp = serializer.validated_data['otp']
+                
+                try:
+                    user = CustomUser.objects.get(email=email)
+                    if user.is_verified:
+                        return Response({
+                            "status": "error",
+                            "detail": "Email is already verified."
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                    if user.otp == otp:
+                        user.is_active = True
+                        user.is_verified = True
+                        user.otp = None  # Clear OTP after verification
+                        user.save()
+                        return Response({
+                            "status": "success",
+                            "message": "Email verified successfully.",
+                            "data": {
+                                "email": email
+                            }
+                        }, status=status.HTTP_200_OK)
+                    else:
+                        return Response({
+                            "status": "error",
+                            "detail": "Invalid or expired OTP."
+                        }, status=status.HTTP_400_BAD_REQUEST)
+                except CustomUser.DoesNotExist:
+                    return Response({
+                        "status": "error",
+                        "detail": "User not found."
+                    }, status=status.HTTP_404_NOT_FOUND)
+        except serializers.ValidationError as e:
+            return Response({
+                "status": "error",
+                "detail": "Invalid input data.",
+                "errors": e.detail
+            }, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({
+                "status": "error",
+                "detail": "An unexpected error occurred during OTP verification.",
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+
 class AdminOnlyView(APIView):
     permission_classes = [IsAuthenticated, IsAdmin]
-
     def get(self, request):
-        return Response({'message': 'Welcome, Admin!'})
+        try:
+            return Response({
+                    "status": "success",
+                    "message": "Welcome, Admin!",
+                    "data": {
+                        "username": request.user.username,
+                        "email": request.user.email,
+                        "role": request.user.role
+                    }
+                }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                    "status": "error",
+                    "detail": "An unexpected error occurred.",
+                    "error": str(e)
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
 class UserOnlyView(APIView):
 
     def get(self, request):
-        return Response({'message': f'Hello, {request.user.role} {request.user.email}'})
+        try:
+            return Response({
+                    "status": "success",
+                    "message": "Welcome, user",
+                    "data": {
+                        "username": request.user.username,
+                        "email": request.user.email,
+                        "role": request.user.role
+                    }
+                }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                    "status": "error",
+                    "detail": "An unexpected error occurred.",
+                    "error": str(e)
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
     
 class LogoutView(APIView):
     def post(self, request):
-        response = Response(
-            {"status": "success", "message": "Logged out successfully"},
-            status=status.HTTP_200_OK
-        )
-        response.delete_cookie('access_token')
+        try:
 
-        return response
+            if 'access_token' not in request.COOKIES:
+                return Response({
+                    "status": "success",
+                    "message": "No active session found, but logout completed."
+                }, status=status.HTTP_200_OK)
 
+            response = Response({
+                "status": "success",
+                "message": "Logged out successfully.",
+                "data": {
+                    "email": request.user.email if request.user.is_authenticated else None
+                }
+            }, status=status.HTTP_200_OK)
+
+            response.delete_cookie(
+                key='access_token',
+                path='/',
+                samesite='None' 
+            )
+
+            if 'refresh_token' in request.COOKIES:
+                response.delete_cookie(
+                    key='refresh_token',
+                    path='/',
+                    samesite='None'
+                )
+
+            return response
+
+        except Exception as e:
+            return Response({
+                "status": "error",
+                "detail": "An unexpected error occurred during logout.",
+                "error": str(e)
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

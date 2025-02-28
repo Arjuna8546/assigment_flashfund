@@ -12,18 +12,15 @@ class AllLoanListSerializer(serializers.ModelSerializer):
     monthly_installment = serializers.FloatField(read_only=True)
     total_interest = serializers.FloatField(read_only=True)
     total_amount = serializers.FloatField(read_only=True)
-    payment_schedule = serializers.SerializerMethodField()
     
-
+    
     class Meta:
         model = Loan
         fields = ['loan_id', 'amount', 'tenure', 'interest_rate', 'monthly_installment', 
-                  'total_interest', 'total_amount', 'payment_schedule']
+                  'total_interest', 'total_amount','instalment']
         read_only_fields = ['loan_id', 'monthly_installment', 'total_interest', 
-                            'total_amount', 'payment_schedule' ]
+                            'total_amount']
         
-    def get_payment_schedule(self, obj):
-        return obj.generate_payment_schedule()
         
         
     def to_representation(self, instance):
@@ -36,10 +33,11 @@ class AllLoanListSerializer(serializers.ModelSerializer):
                 "amount": float(data['amount']),
                 "tenure": data['tenure'],
                 "interest_rate": f"{data['interest_rate']}% yearly",
+                "instalment paid":data['instalment'],
                 "monthly_installment": details['monthly_installment'],
                 "total_interest": details['total_interest'],
-                "total_amount": details['total_amount'],
-                "payment_schedule": data['payment_schedule'],
+                "total_amount": details['total_amount']
+                
                  
             }
         }
