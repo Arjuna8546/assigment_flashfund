@@ -12,7 +12,8 @@ Loan Manager is a Django REST Framework-based API for managing loans, user authe
 ## Live Deployment
 
 The backend is deployed on Render and accessible at:  
-**https://loan-manager-qiu6.onrender.com/**
+[Loan Manager API ](https://loan-manager-qiu6.onrender.com/)
+
 
 ## Prerequisites
 
